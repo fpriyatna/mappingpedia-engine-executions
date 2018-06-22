@@ -1,0 +1,23 @@
+#metadata-mappingexecutionresult-template.ttl
+
+#mpv:MappingExecutionResultEntity rdfs:subClassOf prov:Entity .
+#mpimd:mappingpediaAgent rdfs:subClassOf prov:Agent .
+#mpimd:mappingExecutionActivity rdfs:subClassOf prov:Activity .
+
+mpimd:mappingExecutionResult-$mappingExecutionResultID a mpv:MappingExecutionResultEntity ;
+    mpv:mappingExecutionResultIdentifier "mappingExecutionResult-$mappingExecutionResultID" ;
+    dcat:downloadURL <$downloadURL> ;
+    dcterms:identifier "$mappingExecutionResultID" ;
+    dcterms:title "$mappingExecutionResultTitle" ;
+    dcterms:description "$mappingExecutionResultDescription" ;
+    dcterms:issued "$issued"^^xsd:dateTime;
+    dcterms:modified "$modified"^^xsd:dateTime;
+    prov:wasGeneratedBy mpimd:mappingExecutionActivity ;
+    prov:wasAttributedTo mpimd:mappingpediaAgent ;
+    prov:wasDerivedFrom mpids:dataset-$datasetID ;
+    prov:hadPrimarySource mpimd:mappingDocument-$mappingDocumentID ;
+    mpv:hasMappingDocumentHash "$mappingDocumentHash" ;
+    mpv:hasDatasetDistributionHash "$datasetDistributionHash" ;
+.
+
+#mpids:dataset-$datasetID void:subset mpids:dataset-$subsetID .
