@@ -52,7 +52,7 @@ class MappingExecutionController(
 
     val queryString: String = MappingPediaEngine.generateStringFromTemplateFile(
       mapValues, "templates/findMappingExecutionResultByHash.rq");
-    logger.debug(s"queryString = ${queryString}");
+    logger.info(s"queryString = ${queryString}");
 
     var results: List[String] = List.empty;
 
@@ -217,6 +217,8 @@ class MappingExecutionController(
         unannotatedDistributions);
 
       //val mdDownloadURL = md.getDownloadURL();
+      logger.info(s"pMdHash = ${pMdHash}");
+      logger.info(s"mdDownloadURL = ${mdDownloadURL}");
       val mdHash = if (pMdHash == null && mdDownloadURL != null ) {
         MappingPediaUtility.calculateHash(mdDownloadURL, "UTF-8");
       } else {
