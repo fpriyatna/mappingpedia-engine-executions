@@ -7,7 +7,7 @@ class ExecuteMappingResult (
                              , val mappingExecution:MappingExecution
                              , val mappingExecutionResult:AnnotatedDistribution
                            ){
-  val mappingDocument = mappingExecution.mappingDocument;
+  //val mappingDocument = mappingExecution.mappingDocument;
   val queryURL = mappingExecution.queryFileName
 
   def this(errorCode:Integer, status:String) {
@@ -16,10 +16,10 @@ class ExecuteMappingResult (
   }
 
 
-  val mappingDocumentDownloadURL = mappingDocument.getDownloadURL();
+  val mappingDocumentDownloadURL = mappingExecution.mdDownloadURL
   def getMappingURL() = mappingDocumentDownloadURL;
   def getMapping_document_download_url() = mappingDocumentDownloadURL;
-  def getMapping_document_hash() = mappingDocument.getHash;
+  def getMapping_document_hash() = mappingExecution.mdHash
 
   def getQueryURL() = queryURL;
   def getQuery_file_download_url() = queryURL;

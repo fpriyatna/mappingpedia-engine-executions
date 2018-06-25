@@ -67,7 +67,7 @@ class RMLMapperConnector() {
     val distributionDownloadURL = distribution.dcatDownloadURL;
     logger.info(s"distributionDownloadURL = $distributionDownloadURL");
 
-    val mappingDocumentDownloadURL = mappingExecution.mappingDocument.getDownloadURL();
+    val mappingDocumentDownloadURL = mappingExecution.mdDownloadURL
     logger.info(s"mappingDocumentDownloadURL= $mappingDocumentDownloadURL");
 
     val outputFilepath = if(mappingExecution.outputDirectory == null) { mappingExecution.getOutputFileWithExtension; }

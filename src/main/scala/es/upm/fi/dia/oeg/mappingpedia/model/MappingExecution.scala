@@ -6,8 +6,8 @@ import scala.collection.JavaConverters._
 
 object MappingExecution {
   def apply(
-             mappingDocument:MappingDocument
-             , unannotatedDistributions: java.util.List[UnannotatedDistribution]
+             //mappingDocument:MappingDocument
+             unannotatedDistributions: java.util.List[UnannotatedDistribution]
              , jdbcConnection: JDBCConnection
              , queryFileName:String
              , pOutputFileName:String
@@ -22,10 +22,11 @@ object MappingExecution {
              , mdId: String
              , mdHash: String
              , mdDownloadURL:String
+             , mdLanguage:String
            ) {
     new MappingExecution(
-      mappingDocument
-      , unannotatedDistributions.asScala.toList
+      //mappingDocument
+      unannotatedDistributions.asScala.toList
       , jdbcConnection
       , queryFileName
       , pOutputFileName
@@ -40,13 +41,14 @@ object MappingExecution {
       , mdId: String
       , mdHash: String
       , mdDownloadURL:String
+      , mdLanguage:String
     )
   }
 }
 
 class MappingExecution(
-                        val mappingDocument:MappingDocument
-                        , val unannotatedDistributions: List[UnannotatedDistribution]
+                        // val mappingDocument:MappingDocument
+                        val unannotatedDistributions: List[UnannotatedDistribution]
                         , val jdbcConnection: JDBCConnection
                         , val queryFileName:String
                         , val pOutputFileName:String
@@ -61,11 +63,12 @@ class MappingExecution(
                         , val mdId: String
                         , val mdHash: String
                         , val mdDownloadURL:String
+                        , val mdLanguage:String
                       ) {
 
   def this(
-            mappingDocument:MappingDocument
-            , unannotatedDistributions: java.util.List[UnannotatedDistribution]
+            //mappingDocument:MappingDocument
+            unannotatedDistributions: java.util.List[UnannotatedDistribution]
             , jdbcConnection: JDBCConnection
             , queryFileName:String
             , pOutputFileName:String
@@ -80,10 +83,11 @@ class MappingExecution(
             , mdId: String
             , mdHash: String
             , mdDownloadURL:String
+            , mdLanguage:String
           ) {
     this(
-      mappingDocument
-      , unannotatedDistributions.asScala.toList
+      //mappingDocument
+      unannotatedDistributions.asScala.toList
       , jdbcConnection
       , queryFileName
       , pOutputFileName
@@ -98,6 +102,7 @@ class MappingExecution(
       , mdId: String
       , mdHash: String
       , mdDownloadURL:String
+      , mdLanguage:String
     )
   }
 

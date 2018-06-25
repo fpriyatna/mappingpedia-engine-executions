@@ -73,12 +73,7 @@ class MappingExecutionController(
 
 
   @throws(classOf[Exception])
-  def executeMapping(
-                      mappingExecution: MappingExecution
-                      , mdId: String
-                      , mdHash: String
-                      , mdDownloadURL:String
-                    ) : ExecuteMappingResult = {
+  def executeMapping(mappingExecution: MappingExecution) : ExecuteMappingResult = {
     val mapper = new ObjectMapper();
     val callbackURL = mappingExecution.callbackURL;
 
@@ -199,9 +194,8 @@ class MappingExecutionController(
   }
 
   @throws(classOf[Exception])
-  def executeMappingWithFuture(
-                                mappingExecution: MappingExecution
-                              ) : Future[ExecuteMappingResult] = {
+  def executeMappingWithFuture(mappingExecution: MappingExecution)
+  : Future[ExecuteMappingResult] = {
     val pStoreToGithub = mappingExecution.pStoreToGithub
     val useCache = mappingExecution.useCache
     val pStoreToCKAN = mappingExecution.storeToCKAN;
@@ -553,7 +547,9 @@ class MappingExecutionController(
             val queryFileName = null;
             val outputMediaType = "text/turtle";
 
-            val mappingExecution = new MappingExecution(md, unannotatedDistributions
+            val mappingExecution = new MappingExecution(
+              //md
+              unannotatedDistributions
               , jDBCConnection, queryFileName
               , outputFileName, outputFileExtension, outputMediaType
               , false
@@ -565,6 +561,7 @@ class MappingExecutionController(
               , md.dctIdentifier
               , md.hash
               , md.getDownloadURL()
+              , md.getMapping_language
             );
 
             val mappingExecutionURLs = if(useCache) { this.findByHash(md.hash,unannotatedDistribution.hash); }
@@ -587,11 +584,7 @@ class MappingExecutionController(
               mappingExecution.storeToCKAN = storeToCKAN
 
               //THERE IS NO NEED TO STORE THE EXECUTION RESULT IN THIS PARTICULAR CASE
-              val executionResult = this.executeMapping(mappingExecution
-                , md.dctIdentifier
-                , md.hash
-                , md.getDownloadURL()
-              );
+              val executionResult = this.executeMapping(mappingExecution);
               //val executionResult = MappingExecutionController.executeMapping2(mappingExecution);
 
               executedMappingDocuments = (md.hash,unannotatedDistribution.hash) :: executedMappingDocuments;
@@ -698,8 +691,8 @@ object MappingExecutionController {
 
   def executeR2RMLMappingWithRDB(mappingExecution: MappingExecution) = {
     logger.info("Executing R2RML mapping (RDB) ...")
-    val md = mappingExecution.mappingDocument;
-    val mappingDocumentDownloadURL = md.getDownloadURL();
+    //val md = mappingExecution.mappingDocument;
+    val mappingDocumentDownloadURL = mappingExecution.mdDownloadURL
     logger.info(s"mappingDocumentDownloadURL = $mappingDocumentDownloadURL");
 
     val outputFilepath = if(mappingExecution.outputDirectory == null) { mappingExecution.getOutputFileWithExtension; }
@@ -710,7 +703,7 @@ object MappingExecutionController {
 
     //val distribution = dataset.getDistribution();
     val randomUUID = UUID.randomUUID.toString
-    val databaseName =  s"executions/${md.dctIdentifier}/${randomUUID}"
+    val databaseName =  s"executions/${mappingExecution.mdId}/${randomUUID}"
     logger.info(s"databaseName = $databaseName")
 
     val properties: MorphRDBProperties = new MorphRDBProperties
@@ -731,10 +724,10 @@ object MappingExecutionController {
   }
 
   def executeMapping(mappingExecution:MappingExecution) = {
-    val md = mappingExecution.mappingDocument;
+    //val md = mappingExecution.mappingDocument;
     val mappingLanguage =
-      if (md.mappingLanguage == null) { MappingPediaConstant.MAPPING_LANGUAGE_R2RML }
-      else { md.mappingLanguage }
+      if (mappingExecution.mdLanguage == null) { MappingPediaConstant.MAPPING_LANGUAGE_R2RML }
+      else { mappingExecution.mdLanguage }
 
     if (MappingPediaConstant.MAPPING_LANGUAGE_R2RML.equalsIgnoreCase(mappingLanguage)) {
       //this.morphRDBQueue.enqueue(mappingExecution)
@@ -759,14 +752,14 @@ object MappingExecutionController {
 
   def executeR2RMLMappingWithCSV(mappingExecution:MappingExecution) = {
     logger.info("Executing R2RML mapping (CSV) ...")
-    val md = mappingExecution.mappingDocument;
+    //val md = mappingExecution.mappingDocument;
     val unannotatedDistributions = mappingExecution.unannotatedDistributions
     val queryFileName = mappingExecution.queryFileName
     val outputFilepath = if(mappingExecution.outputDirectory == null) { mappingExecution.getOutputFileWithExtension; }
     else { s"${mappingExecution.outputDirectory}/${mappingExecution.getOutputFileWithExtension}"}
     logger.info(s"outputFilepath = $outputFilepath");
 
-    val mappingDocumentDownloadURL = md.getDownloadURL();
+    val mappingDocumentDownloadURL = mappingExecution.mdDownloadURL
     logger.info(s"mappingDocumentDownloadURL = $mappingDocumentDownloadURL");
 
     //val distributions = unannotatedDataset.dcatDistributions
@@ -778,7 +771,7 @@ object MappingExecutionController {
     val csvSeparator = unannotatedDistributions.iterator.next().csvFieldSeparator;
 
     val randomUUID = UUID.randomUUID.toString
-    val databaseName =  s"executions/${md.dctIdentifier}/${randomUUID}"
+    val databaseName =  s"executions/${mappingExecution.mdId}/${randomUUID}"
     logger.info(s"databaseName = $databaseName")
 
     val properties: MorphCSVProperties = new MorphCSVProperties
