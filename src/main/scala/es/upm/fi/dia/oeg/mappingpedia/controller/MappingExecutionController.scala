@@ -75,6 +75,9 @@ class MappingExecutionController(
   @throws(classOf[Exception])
   def executeMapping(
                       mappingExecution: MappingExecution
+                      , mdId: String
+                      , mdHash: String
+                      , mdDownloadURL:String
                     ) : ExecuteMappingResult = {
     val mapper = new ObjectMapper();
     val callbackURL = mappingExecution.callbackURL;
@@ -202,12 +205,15 @@ class MappingExecutionController(
     val pStoreToGithub = mappingExecution.pStoreToGithub
     val useCache = mappingExecution.useCache
     val pStoreToCKAN = mappingExecution.storeToCKAN;
+    val mdId = mappingExecution.mdId;
+    val pMdHash = mappingExecution.mdHash
+    val mdDownloadURL = mappingExecution.mdDownloadURL
 
     val f = Future {
       var errorOccured = false;
       var collectiveErrorMessage: List[String] = Nil;
 
-      val md = mappingExecution.mappingDocument
+      //val md = mappingExecution.mappingDocument
       val unannotatedDistributions = mappingExecution.unannotatedDistributions
       val dataset = unannotatedDistributions.iterator.next().dataset;
 
@@ -216,13 +222,14 @@ class MappingExecutionController(
       val unannotatedDatasetHash = MappingPediaUtility.calculateHash(
         unannotatedDistributions);
 
-      val mdDownloadURL = md.getDownloadURL();
-      if (md.hash == null && mdDownloadURL != null ) {
-        val hashValue = MappingPediaUtility.calculateHash(mdDownloadURL, "UTF-8");
-        md.hash = hashValue
+      //val mdDownloadURL = md.getDownloadURL();
+      val mdHash = if (pMdHash == null && mdDownloadURL != null ) {
+        MappingPediaUtility.calculateHash(mdDownloadURL, "UTF-8");
+      } else {
+        pMdHash
       }
 
-      val cacheExecutionURL = this.findByHash(md.hash, unannotatedDatasetHash);
+      val cacheExecutionURL = this.findByHash(mdHash, unannotatedDatasetHash);
       logger.debug(s"cacheExecutionURL = ${cacheExecutionURL}");
 
       if(cacheExecutionURL == null || cacheExecutionURL.results.isEmpty || !useCache) {
@@ -231,7 +238,7 @@ class MappingExecutionController(
         val mappedClasses:String = try {
           //this.mappingDocumentController.findMappedClassesByMappingDocumentId(md.dctIdentifier).results.mkString(",");
 
-          val mappingsServerUrl = MPCConstants.ENGINE_DATASETS_SERVER + "mapped_classes?mapping_document_id=" + md.dctIdentifier;
+          val mappingsServerUrl = MPCConstants.ENGINE_DATASETS_SERVER + "mapped_classes?mapping_document_id=" + mdId;
           logger.info("mappingsServerUrl = " + mappingsServerUrl);
           val jsonResponse = Unirest.get(mappingsServerUrl).asJson();
           jsonResponse.getBody().getObject().getJSONArray("results").toList.toArray.toList.mkString(",")
@@ -254,7 +261,7 @@ class MappingExecutionController(
         annotatedDistribution.dctDescription = "Annotated Dataset using the annotation: " + mdDownloadURL;
 
 
-        val mappingExecutionDirectory = s"executions/$organizationId/$datasetId/${md.dctIdentifier}";
+        val mappingExecutionDirectory = s"executions/$organizationId/$datasetId/${mdId}";
 
         val outputFileNameWithExtension:String = mappingExecution.getOutputFileWithExtension;
 
@@ -344,7 +351,7 @@ class MappingExecutionController(
             val mapTextBody:Map[String, String] = Map(
               MappingPediaConstant.CKAN_RESOURCE_ORIGINAL_DATASET_DISTRIBUTION_DOWNLOAD_URL ->
                 unannotatedDistributions.map(distribution => distribution.dcatDownloadURL).mkString(",")
-              , MappingPediaConstant.CKAN_RESOURCE_MAPPING_DOCUMENT_DOWNLOAD_URL -> md.getDownloadURL()
+              , MappingPediaConstant.CKAN_RESOURCE_MAPPING_DOCUMENT_DOWNLOAD_URL -> mdDownloadURL
               //, MappingPediaConstant.CKAN_RESOURCE_PROV_TRIPLES -> annotatedDistribution.manifestDownloadURL
               , MappingPediaConstant.CKAN_RESOURCE_CLASS -> mappedClasses
               //, "$manifestDownloadURL" -> annotatedDistribution.manifestDownloadURL
@@ -407,7 +414,10 @@ class MappingExecutionController(
 
         //GENERATING MANIFEST FILE
         val manifestFile = MappingExecutionController.generateManifestFile(
-          annotatedDistribution, unannotatedDistributions, md)
+          annotatedDistribution, unannotatedDistributions
+          , mdId: String
+          , mdHash: String
+        )
         logger.info("Manifest file generated.")
 
 
@@ -415,7 +425,7 @@ class MappingExecutionController(
         val addManifestFileGitHubResponse:HttpResponse[JsonNode] =
           if(MappingPediaEngine.mappingpediaProperties.githubEnabled && pStoreToGithub) {
             try {
-              this.storeManifestFileOnGitHub(manifestFile, dataset, md);
+              this.storeManifestFileOnGitHub(manifestFile, dataset, mdId);
             } catch {
               case e: Exception => {
                 errorOccured = true;
@@ -493,7 +503,8 @@ class MappingExecutionController(
 
   }
 
-  def getInstances(aClass:String, maxMappingDocuments:Integer, useCache:Boolean, updateResource:Boolean) = {
+  def getInstances(aClass:String, maxMappingDocuments:Integer, useCache:Boolean
+                   , updateResource:Boolean) = {
     logger.info(s"useCache = ${useCache}");
 
     //val mappingDocuments = this.mappingDocumentController.findByClassAndProperty(aClass, null, true).results
@@ -551,6 +562,9 @@ class MappingExecutionController(
               , useCache
               , null
               , updateResource
+              , md.dctIdentifier
+              , md.hash
+              , md.getDownloadURL()
             );
 
             val mappingExecutionURLs = if(useCache) { this.findByHash(md.hash,unannotatedDistribution.hash); }
@@ -573,7 +587,11 @@ class MappingExecutionController(
               mappingExecution.storeToCKAN = storeToCKAN
 
               //THERE IS NO NEED TO STORE THE EXECUTION RESULT IN THIS PARTICULAR CASE
-              val executionResult = this.executeMapping(mappingExecution);
+              val executionResult = this.executeMapping(mappingExecution
+                , md.dctIdentifier
+                , md.hash
+                , md.getDownloadURL()
+              );
               //val executionResult = MappingExecutionController.executeMapping2(mappingExecution);
 
               executedMappingDocuments = (md.hash,unannotatedDistribution.hash) :: executedMappingDocuments;
@@ -598,13 +616,17 @@ class MappingExecutionController(
   }
 
 
-  def storeManifestFileOnGitHub(manifestFile:File, dataset:Dataset, mappingDocument: MappingDocument) = {
+  def storeManifestFileOnGitHub(manifestFile:File, dataset:Dataset
+                                //                                , mappingDocument: MappingDocument
+                                , mdId:String
+                               ) = {
     val organization = dataset.dctPublisher;
 
     logger.info("storing manifest file on github ...")
-    val addNewManifestCommitMessage = s"Add manifest file for the execution of mapping document: ${mappingDocument.dctIdentifier}"
+    val addNewManifestCommitMessage = s"Add manifest file for the execution of mapping document: ${mdId}"
     val githubResponse = githubClient.encodeAndPutFile(organization.dctIdentifier
-      , dataset.dctIdentifier, manifestFile.getName, addNewManifestCommitMessage, manifestFile)
+      , dataset.dctIdentifier, manifestFile.getName, addNewManifestCommitMessage
+      , manifestFile)
     logger.info("manifest file stored on github ...")
     githubResponse
   }
@@ -799,11 +821,12 @@ object MappingExecutionController {
   def generateManifestFile(mappingExecutionResult:AnnotatedDistribution
                            //, datasetDistribution: Distribution
                            , unannotatedDistributions: List[UnannotatedDistribution]
-                           , mappingDocument:MappingDocument) = {
-
-
-
-
+                           //, mappingDocument:MappingDocument
+                           , mdId: String
+                           , mdHash: String
+                           //, mdDownloadURL:String
+                           //, pMdHash:String
+                          ) = {
     logger.info("Generating manifest file for Mapping Execution Result ...")
     try {
       val templateFiles = List(
@@ -817,7 +840,7 @@ object MappingExecutionController {
       else { mappingExecutionResult.dcatDownloadURL }
       logger.info(s"downloadURL = ${downloadURL}")
 
-      val mappingDocumentHash = if(mappingDocument.hash == null) { "" } else { mappingDocument.hash }
+      val mappingDocumentHash = if(mdHash == null) { "" } else { mdHash }
       logger.info(s"mappingDocumentHash = ${mappingDocumentHash}")
 
       //val datasetDistributionHash = unannotatedDataset.dcatDistributions.hashCode().toString
@@ -831,7 +854,7 @@ object MappingExecutionController {
         , "$mappingExecutionResultTitle" -> mappingExecutionResult.dctTitle
         , "$mappingExecutionResultDescription" -> mappingExecutionResult.dctDescription
         , "$datasetID" -> datasetId
-        , "$mappingDocumentID" -> mappingDocument.dctIdentifier
+        , "$mappingDocumentID" -> mdId
         , "$downloadURL" -> downloadURL
         , "$mappingDocumentHash" -> mappingDocumentHash
         , "$datasetDistributionHash" -> datasetDistributionHash
@@ -840,9 +863,12 @@ object MappingExecutionController {
 
       );
 
-      val manifestString = MappingPediaEngine.generateManifestString(mapValues, templateFiles);
-      val filename = s"metadata-mappingexecutionresult-${mappingExecutionResult.dctIdentifier}.ttl";
-      val manifestFile = MappingPediaEngine.generateManifestFile(manifestString, filename, datasetId);
+      val manifestString = MappingPediaEngine.generateManifestString(
+        mapValues, templateFiles);
+      val filename = s"metadata-mappingexecutionresult-${
+        mappingExecutionResult.dctIdentifier}.ttl";
+      val manifestFile = MappingPediaEngine.generateManifestFile(
+        manifestString, filename, datasetId);
       manifestFile;
     } catch {
       case e:Exception => {
