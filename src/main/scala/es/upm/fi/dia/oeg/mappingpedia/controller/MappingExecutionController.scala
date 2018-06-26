@@ -5,8 +5,8 @@ import java.net.{HttpURLConnection, URL}
 import java.util.{Date, Properties, UUID}
 
 import com.mashape.unirest.http.{HttpResponse, JsonNode, Unirest}
-import es.upm.fi.dia.oeg.mappingpedia.model.result.{ExecuteMappingResult, ListResult}
-import es.upm.fi.dia.oeg.mappingpedia.{MPCConstants, MappingPediaConstant, MappingPediaEngine}
+import es.upm.fi.dia.oeg.mappingpedia.model.result.{ExecuteMappingResult, GeneralResult, ListResult}
+import es.upm.fi.dia.oeg.mappingpedia.{MPCConstants, MappingPediaConstant, MappingPediaProperties}
 import org.slf4j.{Logger, LoggerFactory}
 import es.upm.fi.dia.oeg.mappingpedia.connector.RMLMapperConnector
 import es.upm.fi.dia.oeg.mappingpedia.model._
@@ -20,12 +20,249 @@ import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
+object MappingExecutionController {
+  val logger: Logger = LoggerFactory.getLogger(this.getClass);
+  //var executionQueue = new mutable.Queue[MappingExecution];
+
+  def apply(): MappingExecutionController = {
+    val propertiesFilePath = "/" + MappingPediaConstant.DEFAULT_CONFIGURATION_FILENAME;
+
+    /*
+    val url = getClass.getResource(propertiesFilePath)
+    logger.info(s"loading mappingpedia-engine-datasets configuration file from:\n ${url}")
+    val properties = new Properties();
+    if (url != null) {
+      val source = Source.fromURL(url)
+      val reader = source.bufferedReader();
+      properties.load(reader)
+      logger.debug(s"properties.keySet = ${properties.keySet()}")
+    }
+    */
+
+    logger.info(s"loading mappingpedia-engine-executions configuration file from:\n ${propertiesFilePath}")
+    val in = getClass.getResourceAsStream(propertiesFilePath)
+//    val properties = new Properties();
+//    properties.load(in)
+    val properties = new MappingPediaProperties(in);
+
+    logger.info(s"properties.keySet = ${properties.keySet()}")
+
+    MappingExecutionController(properties)
+  }
+
+  def apply(properties: MappingPediaProperties): MappingExecutionController = {
+    val ckanUtility = new MpcCkanUtility(
+      properties.getProperty(MappingPediaConstant.CKAN_URL)
+      , properties.getProperty(MappingPediaConstant.CKAN_KEY)
+    );
+
+    val githubUtility = new MpcGithubUtility(
+      properties.getProperty(MappingPediaConstant.GITHUB_REPOSITORY)
+      , properties.getProperty(MappingPediaConstant.GITHUB_USER)
+      , properties.getProperty(MappingPediaConstant.GITHUB_ACCESS_TOKEN)
+    );
+
+    val virtuosoUtility = new MpcVirtuosoUtility(
+      properties.getProperty(MappingPediaConstant.VIRTUOSO_JDBC)
+      , properties.getProperty(MappingPediaConstant.VIRTUOSO_USER)
+      , properties.getProperty(MappingPediaConstant.VIRTUOSO_PWD)
+      , properties.getProperty(MappingPediaConstant.GRAPH_NAME)
+    );
+
+    val schemaOntology = MPCJenaUtility.loadSchemaOrgOntology(virtuosoUtility
+      , MappingPediaConstant.SCHEMA_ORG_FILE, MappingPediaConstant.FORMAT)
+    val jenaUtility = new MPCJenaUtility(schemaOntology);
+
+    new MappingExecutionController(ckanUtility, githubUtility, virtuosoUtility, jenaUtility, properties);
+
+  }
+
+  /*
+  val ckanUtility = new CKANUtility(
+    MappingPediaEngine.mappingpediaProperties.ckanURL, MappingPediaEngine.mappingpediaProperties.ckanKey)
+  val githubClient = MappingPediaEngine.githubClient;
+  */
+
+
+  def executeR2RMLMappingWithRDB(mappingExecution: MappingExecution) = {
+    logger.info("Executing R2RML mapping (RDB) ...")
+    //val md = mappingExecution.mappingDocument;
+    val mappingDocumentDownloadURL = mappingExecution.mdDownloadURL
+    logger.info(s"mappingDocumentDownloadURL = $mappingDocumentDownloadURL");
+
+    val outputFilepath = if(mappingExecution.outputDirectory == null) { mappingExecution.getOutputFileWithExtension; }
+    else { s"${mappingExecution.outputDirectory}/${mappingExecution.getOutputFileWithExtension}"}
+    logger.info(s"outputFilepath = $outputFilepath");
+
+    val jDBCConnection = mappingExecution.jdbcConnection
+
+    //val distribution = dataset.getDistribution();
+    val randomUUID = UUID.randomUUID.toString
+    val databaseName =  s"executions/${mappingExecution.mdId}/${randomUUID}"
+    logger.info(s"databaseName = $databaseName")
+
+    val properties: MorphRDBProperties = new MorphRDBProperties
+    properties.setNoOfDatabase(1)
+    properties.setDatabaseUser(jDBCConnection.dbUserName)
+    properties.setDatabasePassword(jDBCConnection.dbPassword)
+    properties.setDatabaseName(jDBCConnection.dbName)
+    properties.setDatabaseURL(jDBCConnection.jdbc_url)
+    properties.setDatabaseDriver(jDBCConnection.databaseDriver)
+    properties.setDatabaseType(jDBCConnection.databaseType)
+    properties.setMappingDocumentFilePath(mappingDocumentDownloadURL)
+    properties.setOutputFilePath(outputFilepath)
+
+
+    val runnerFactory: MorphRDBRunnerFactory = new MorphRDBRunnerFactory
+    val runner: MorphBaseRunner = runnerFactory.createRunner(properties)
+    runner.run
+  }
+
+  def executeMapping(mappingExecution:MappingExecution) = {
+    //val md = mappingExecution.mappingDocument;
+    val mappingLanguage =
+      if (mappingExecution.mdLanguage == null) { MappingPediaConstant.MAPPING_LANGUAGE_R2RML }
+      else { mappingExecution.mdLanguage }
+
+    if (MappingPediaConstant.MAPPING_LANGUAGE_R2RML.equalsIgnoreCase(mappingLanguage)) {
+      //this.morphRDBQueue.enqueue(mappingExecution)
+      MappingExecutionController.executeR2RMLMapping(mappingExecution);
+    } else if (MappingPediaConstant.MAPPING_LANGUAGE_RML.equalsIgnoreCase(mappingLanguage)) {
+      MappingExecutionController.executeRMLMapping(mappingExecution);
+    } else if (MappingPediaConstant.MAPPING_LANGUAGE_xR2RML.equalsIgnoreCase(mappingLanguage)) {
+      throw new Exception(mappingLanguage + " Language is not supported yet");
+    } else {
+      throw new Exception(mappingLanguage + " Language is not supported yet");
+    }
+    logger.info("mapping execution done!")
+  }
+
+  def executeR2RMLMapping(mappingExecution:MappingExecution) = {
+    if(mappingExecution.jdbcConnection != null) {
+      this.executeR2RMLMappingWithRDB(mappingExecution)
+    } else if(mappingExecution.unannotatedDistributions != null) {
+      this.executeR2RMLMappingWithCSV(mappingExecution);
+    }
+  }
+
+  def executeR2RMLMappingWithCSV(mappingExecution:MappingExecution) = {
+    logger.info("Executing R2RML mapping (CSV) ...")
+    //val md = mappingExecution.mappingDocument;
+    val unannotatedDistributions = mappingExecution.unannotatedDistributions
+    val queryFileName = mappingExecution.queryFileName
+    val outputFilepath = if(mappingExecution.outputDirectory == null) { mappingExecution.getOutputFileWithExtension; }
+    else { s"${mappingExecution.outputDirectory}/${mappingExecution.getOutputFileWithExtension}"}
+    logger.info(s"outputFilepath = $outputFilepath");
+
+    val mappingDocumentDownloadURL = mappingExecution.mdDownloadURL
+    logger.info(s"mappingDocumentDownloadURL = $mappingDocumentDownloadURL");
+
+    //val distributions = unannotatedDataset.dcatDistributions
+    val downloadURLs = unannotatedDistributions.map(distribution => distribution.dcatDownloadURL);
+
+    val datasetDistributionDownloadURL = downloadURLs.mkString(",")
+    logger.info(s"datasetDistributionDownloadURL = $datasetDistributionDownloadURL");
+
+    val csvSeparator = unannotatedDistributions.iterator.next().csvFieldSeparator;
+
+    val randomUUID = UUID.randomUUID.toString
+    val databaseName =  s"executions/${mappingExecution.mdId}/${randomUUID}"
+    logger.info(s"databaseName = $databaseName")
+
+    val properties: MorphCSVProperties = new MorphCSVProperties
+    properties.setDatabaseName(databaseName)
+    properties.setMappingDocumentFilePath(mappingDocumentDownloadURL)
+    properties.setOutputFilePath(outputFilepath);
+    properties.setCSVFile(datasetDistributionDownloadURL);
+    properties.setQueryFilePath(queryFileName);
+    if (csvSeparator != null) {
+      properties.fieldSeparator = Some(csvSeparator);
+    }
+
+    val runnerFactory: MorphCSVRunnerFactory = new MorphCSVRunnerFactory
+    val runner: MorphBaseRunner = runnerFactory.createRunner(properties)
+    runner.run
+  }
+
+  def executeRMLMapping(mappingExecution: MappingExecution) = {
+    logger.info("Executing RML mapping ...")
+    val rmlConnector = new RMLMapperConnector();
+    rmlConnector.executeWithMain(mappingExecution);
+  }
+
+
+
+  def getMappingExecutionResultURL(mdSHA:String, datasetDistributionSHA:String) = {
+
+  }
+
+  def generateManifestFile(mappingExecutionResult:AnnotatedDistribution
+                           //, datasetDistribution: Distribution
+                           , unannotatedDistributions: List[UnannotatedDistribution]
+                           //, mappingDocument:MappingDocument
+                           , mdId: String
+                           , mdHash: String
+                           //, mdDownloadURL:String
+                           //, pMdHash:String
+                          ) = {
+    logger.info("Generating manifest file for Mapping Execution Result ...")
+    try {
+      val templateFiles = List(
+        "templates/metadata-namespaces-template.ttl"
+        , "templates/metadata-mappingexecutionresult-template.ttl"
+      );
+
+      //val datasetDistributionDownloadURL:String = "";
+
+      val downloadURL = if(mappingExecutionResult.dcatDownloadURL == null) { "" }
+      else { mappingExecutionResult.dcatDownloadURL }
+      logger.info(s"downloadURL = ${downloadURL}")
+
+      val mappingDocumentHash = if(mdHash == null) { "" } else { mdHash }
+      logger.info(s"mappingDocumentHash = ${mappingDocumentHash}")
+
+      //val datasetDistributionHash = unannotatedDataset.dcatDistributions.hashCode().toString
+      val datasetDistributionHash = MappingPediaUtility.calculateHash(unannotatedDistributions);
+      logger.info(s"datasetDistributionHash = ${datasetDistributionHash}")
+
+      val datasetId = mappingExecutionResult.dataset.dctIdentifier;
+
+      val mapValues:Map[String,String] = Map(
+        "$mappingExecutionResultID" -> mappingExecutionResult.dctIdentifier
+        , "$mappingExecutionResultTitle" -> mappingExecutionResult.dctTitle
+        , "$mappingExecutionResultDescription" -> mappingExecutionResult.dctDescription
+        , "$datasetID" -> datasetId
+        , "$mappingDocumentID" -> mdId
+        , "$downloadURL" -> downloadURL
+        , "$mappingDocumentHash" -> mappingDocumentHash
+        , "$datasetDistributionHash" -> datasetDistributionHash
+        , "$issued" -> mappingExecutionResult.dctIssued
+        , "$modified" -> mappingExecutionResult.dctModified
+
+      );
+
+      val manifestString = MpcUtility.generateManifestString(mapValues, templateFiles);
+      val filename = s"metadata-mappingexecutionresult-${mappingExecutionResult.dctIdentifier}.ttl";
+      val manifestFile = MpcUtility.generateManifestFile(manifestString, filename, datasetId);
+      manifestFile;
+    } catch {
+      case e:Exception => {
+        e.printStackTrace()
+        val errorMessage = "Error occured when generating manifest file: " + e.getMessage
+        null;
+      }
+    }
+  }
+
+}
+
+
 class MappingExecutionController(
-                                  val ckanClient:CKANUtility
+                                  val ckanClient:MpcCkanUtility
                                   , val githubClient:MpcGithubUtility
                                   , val virtuosoClient: MpcVirtuosoUtility
                                   , val jenaClient:MPCJenaUtility
-                                  , properties: Properties
+                                  , val properties: MappingPediaProperties
                                 )
 {
   val logger: Logger = LoggerFactory.getLogger(this.getClass);
@@ -36,16 +273,51 @@ class MappingExecutionController(
   val helperThread = new Thread(helper);
   helperThread.start();
 
+  def addQueryFile(queryFile: File, organizationId:String, datasetId:String) : GeneralResult = {
+    logger.info("storing a new query file in github ...")
+    logger.debug("organizationId = " + organizationId)
+    logger.debug("datasetId = " + datasetId)
+
+    try {
+      val commitMessage = "Add a new query file by mappingpedia-engine"
+      val response = githubClient.encodeAndPutFile(organizationId
+        , datasetId, queryFile.getName, commitMessage, queryFile)
+      logger.debug("response.getHeaders = " + response.getHeaders)
+      logger.debug("response.getBody = " + response.getBody)
+      val responseStatus = response.getStatus
+      logger.debug("responseStatus = " + responseStatus)
+      val responseStatusText = response.getStatusText
+      logger.debug("responseStatusText = " + responseStatusText)
+      if (HttpURLConnection.HTTP_CREATED == responseStatus) {
+        val queryURL = response.getBody.getObject.getJSONObject("content").getString("url")
+        logger.debug("queryURL = " + queryURL)
+        logger.info("query file stored.")
+        val executionResult = new GeneralResult(responseStatusText, responseStatus)
+        return executionResult
+      }
+      else {
+        val executionResult = new GeneralResult(responseStatusText, responseStatus)
+        return executionResult
+      }
+    } catch {
+      case e: Exception =>
+        val errorMessage = e.getMessage
+        logger.error("error uploading a new query file: " + errorMessage)
+        val errorCode = HttpURLConnection.HTTP_INTERNAL_ERROR
+        val executionResult = new GeneralResult(errorMessage, errorCode)
+        return executionResult
+    }
+  }
 
 
   def findByHash(mdHash:String, datasetDistributionHash:String) = {
     val mapValues: Map[String, String] = Map(
-      "$graphURL" -> MappingPediaEngine.mappingpediaProperties.graphName
+      "$graphURL" -> this.properties.graphName
       , "$mdHash" -> mdHash
       , "$datasetDistributionHash" -> datasetDistributionHash
     );
 
-    val queryString: String = MappingPediaEngine.generateStringFromTemplateFile(
+    val queryString: String = MpcUtility.generateStringFromTemplateFile(
       mapValues, "templates/findMappingExecutionResultByHash.rq");
     logger.info(s"queryString = ${queryString}");
 
@@ -280,7 +552,7 @@ class MappingExecutionController(
 
 
         //STORING MAPPING EXECUTION RESULT ON GITHUB
-        val githubResponse = if(MappingPediaEngine.mappingpediaProperties.githubEnabled && pStoreToGithub) {
+        val githubResponse = if(this.properties.githubEnabled && pStoreToGithub) {
           try {
             val response = githubClient.encodeAndPutFile(githubOutputFilepath
               , "add mapping execution result by mappingpedia engine", localOutputFile);
@@ -332,7 +604,7 @@ class MappingExecutionController(
 
         //STORING MAPPING EXECUTION RESULT AS A RESOURCE ON CKAN
         val ckanAddResourceResponse = try {
-          if(MappingPediaEngine.mappingpediaProperties.ckanEnable && pStoreToCKAN) {
+          if(this.properties.ckanEnable && pStoreToCKAN) {
             val annotatedResourcesIds = if(dataset.ckanPackageId != null) {
               ckanClient.getAnnotatedResourcesIds(dataset.ckanPackageId);
             } else { null }
@@ -389,7 +661,7 @@ class MappingExecutionController(
         if(ckanAddResourceResponseStatusCode != null && ckanAddResourceResponseStatusCode >= 200
           && ckanAddResourceResponseStatusCode <300) {
           try {
-            val ckanAddResourceResult = CKANUtility.getResult(ckanAddResourceResponse);
+            val ckanAddResourceResult = MpcCkanUtility.getResult(ckanAddResourceResponse);
             val packageId = ckanAddResourceResult.getString("package_id")
             val resourceId = ckanAddResourceResult.getString("id")
             val resourceURL = ckanAddResourceResult.getString("url")
@@ -415,7 +687,7 @@ class MappingExecutionController(
 
         //STORING MANIFEST ON GITHUB
         val addManifestFileGitHubResponse:HttpResponse[JsonNode] =
-          if(MappingPediaEngine.mappingpediaProperties.githubEnabled && pStoreToGithub) {
+          if(this.properties.githubEnabled && pStoreToGithub) {
             try {
               this.storeManifestFileOnGitHub(manifestFile, dataset, mdId);
             } catch {
@@ -446,7 +718,7 @@ class MappingExecutionController(
 
         //STORING MANIFEST FILE AS TRIPLES ON VIRTUOSO
         val addManifestVirtuosoResponse:String = try {
-          if(MappingPediaEngine.mappingpediaProperties.virtuosoEnabled) {
+          if(this.properties.virtuosoEnabled) {
             this.storeManifestOnVirtuoso(manifestFile);
           } else {
             "Storing to Virtuoso is not enabled!";
@@ -635,240 +907,3 @@ class MappingExecutionController(
   }
 }
 
-object MappingExecutionController {
-  val logger: Logger = LoggerFactory.getLogger(this.getClass);
-  //var executionQueue = new mutable.Queue[MappingExecution];
-
-
-
-  def apply(): MappingExecutionController = {
-    val propertiesFilePath = "/" + MappingPediaConstant.DEFAULT_CONFIGURATION_FILENAME;
-
-    /*
-    val url = getClass.getResource(propertiesFilePath)
-    logger.info(s"loading mappingpedia-engine-datasets configuration file from:\n ${url}")
-    val properties = new Properties();
-    if (url != null) {
-      val source = Source.fromURL(url)
-      val reader = source.bufferedReader();
-      properties.load(reader)
-      logger.debug(s"properties.keySet = ${properties.keySet()}")
-    }
-    */
-
-    val in = getClass.getResourceAsStream(propertiesFilePath)
-    val properties = new Properties();
-    properties.load(in)
-    logger.debug(s"properties.keySet = ${properties.keySet()}")
-
-    MappingExecutionController(properties)
-  }
-
-  def apply(properties: Properties): MappingExecutionController = {
-    val ckanUtility = new CKANUtility(
-      properties.getProperty(MappingPediaConstant.CKAN_URL)
-      , properties.getProperty(MappingPediaConstant.CKAN_KEY)
-    );
-
-    val githubUtility = new MpcGithubUtility(
-      properties.getProperty(MappingPediaConstant.GITHUB_REPOSITORY)
-      , properties.getProperty(MappingPediaConstant.GITHUB_USER)
-      , properties.getProperty(MappingPediaConstant.GITHUB_ACCESS_TOKEN)
-    );
-
-    val virtuosoUtility = new MpcVirtuosoUtility(
-      properties.getProperty(MappingPediaConstant.VIRTUOSO_JDBC)
-      , properties.getProperty(MappingPediaConstant.VIRTUOSO_USER)
-      , properties.getProperty(MappingPediaConstant.VIRTUOSO_PWD)
-      , properties.getProperty(MappingPediaConstant.GRAPH_NAME)
-    );
-
-    val schemaOntology = MPCJenaUtility.loadSchemaOrgOntology(virtuosoUtility
-      , MappingPediaConstant.SCHEMA_ORG_FILE, MappingPediaConstant.FORMAT)
-    val jenaUtility = new MPCJenaUtility(schemaOntology);
-
-    new MappingExecutionController(ckanUtility, githubUtility, virtuosoUtility, jenaUtility, properties);
-
-  }
-
-  /*
-  val ckanUtility = new CKANUtility(
-    MappingPediaEngine.mappingpediaProperties.ckanURL, MappingPediaEngine.mappingpediaProperties.ckanKey)
-  val githubClient = MappingPediaEngine.githubClient;
-  */
-
-
-  def executeR2RMLMappingWithRDB(mappingExecution: MappingExecution) = {
-    logger.info("Executing R2RML mapping (RDB) ...")
-    //val md = mappingExecution.mappingDocument;
-    val mappingDocumentDownloadURL = mappingExecution.mdDownloadURL
-    logger.info(s"mappingDocumentDownloadURL = $mappingDocumentDownloadURL");
-
-    val outputFilepath = if(mappingExecution.outputDirectory == null) { mappingExecution.getOutputFileWithExtension; }
-    else { s"${mappingExecution.outputDirectory}/${mappingExecution.getOutputFileWithExtension}"}
-    logger.info(s"outputFilepath = $outputFilepath");
-
-    val jDBCConnection = mappingExecution.jdbcConnection
-
-    //val distribution = dataset.getDistribution();
-    val randomUUID = UUID.randomUUID.toString
-    val databaseName =  s"executions/${mappingExecution.mdId}/${randomUUID}"
-    logger.info(s"databaseName = $databaseName")
-
-    val properties: MorphRDBProperties = new MorphRDBProperties
-    properties.setNoOfDatabase(1)
-    properties.setDatabaseUser(jDBCConnection.dbUserName)
-    properties.setDatabasePassword(jDBCConnection.dbPassword)
-    properties.setDatabaseName(jDBCConnection.dbName)
-    properties.setDatabaseURL(jDBCConnection.jdbc_url)
-    properties.setDatabaseDriver(jDBCConnection.databaseDriver)
-    properties.setDatabaseType(jDBCConnection.databaseType)
-    properties.setMappingDocumentFilePath(mappingDocumentDownloadURL)
-    properties.setOutputFilePath(outputFilepath)
-
-
-    val runnerFactory: MorphRDBRunnerFactory = new MorphRDBRunnerFactory
-    val runner: MorphBaseRunner = runnerFactory.createRunner(properties)
-    runner.run
-  }
-
-  def executeMapping(mappingExecution:MappingExecution) = {
-    //val md = mappingExecution.mappingDocument;
-    val mappingLanguage =
-      if (mappingExecution.mdLanguage == null) { MappingPediaConstant.MAPPING_LANGUAGE_R2RML }
-      else { mappingExecution.mdLanguage }
-
-    if (MappingPediaConstant.MAPPING_LANGUAGE_R2RML.equalsIgnoreCase(mappingLanguage)) {
-      //this.morphRDBQueue.enqueue(mappingExecution)
-      MappingExecutionController.executeR2RMLMapping(mappingExecution);
-    } else if (MappingPediaConstant.MAPPING_LANGUAGE_RML.equalsIgnoreCase(mappingLanguage)) {
-      MappingExecutionController.executeRMLMapping(mappingExecution);
-    } else if (MappingPediaConstant.MAPPING_LANGUAGE_xR2RML.equalsIgnoreCase(mappingLanguage)) {
-      throw new Exception(mappingLanguage + " Language is not supported yet");
-    } else {
-      throw new Exception(mappingLanguage + " Language is not supported yet");
-    }
-    logger.info("mapping execution done!")
-  }
-
-  def executeR2RMLMapping(mappingExecution:MappingExecution) = {
-    if(mappingExecution.jdbcConnection != null) {
-      this.executeR2RMLMappingWithRDB(mappingExecution)
-    } else if(mappingExecution.unannotatedDistributions != null) {
-      this.executeR2RMLMappingWithCSV(mappingExecution);
-    }
-  }
-
-  def executeR2RMLMappingWithCSV(mappingExecution:MappingExecution) = {
-    logger.info("Executing R2RML mapping (CSV) ...")
-    //val md = mappingExecution.mappingDocument;
-    val unannotatedDistributions = mappingExecution.unannotatedDistributions
-    val queryFileName = mappingExecution.queryFileName
-    val outputFilepath = if(mappingExecution.outputDirectory == null) { mappingExecution.getOutputFileWithExtension; }
-    else { s"${mappingExecution.outputDirectory}/${mappingExecution.getOutputFileWithExtension}"}
-    logger.info(s"outputFilepath = $outputFilepath");
-
-    val mappingDocumentDownloadURL = mappingExecution.mdDownloadURL
-    logger.info(s"mappingDocumentDownloadURL = $mappingDocumentDownloadURL");
-
-    //val distributions = unannotatedDataset.dcatDistributions
-    val downloadURLs = unannotatedDistributions.map(distribution => distribution.dcatDownloadURL);
-
-    val datasetDistributionDownloadURL = downloadURLs.mkString(",")
-    logger.info(s"datasetDistributionDownloadURL = $datasetDistributionDownloadURL");
-
-    val csvSeparator = unannotatedDistributions.iterator.next().csvFieldSeparator;
-
-    val randomUUID = UUID.randomUUID.toString
-    val databaseName =  s"executions/${mappingExecution.mdId}/${randomUUID}"
-    logger.info(s"databaseName = $databaseName")
-
-    val properties: MorphCSVProperties = new MorphCSVProperties
-    properties.setDatabaseName(databaseName)
-    properties.setMappingDocumentFilePath(mappingDocumentDownloadURL)
-    properties.setOutputFilePath(outputFilepath);
-    properties.setCSVFile(datasetDistributionDownloadURL);
-    properties.setQueryFilePath(queryFileName);
-    if (csvSeparator != null) {
-      properties.fieldSeparator = Some(csvSeparator);
-    }
-
-    val runnerFactory: MorphCSVRunnerFactory = new MorphCSVRunnerFactory
-    val runner: MorphBaseRunner = runnerFactory.createRunner(properties)
-    runner.run
-  }
-
-  def executeRMLMapping(mappingExecution: MappingExecution) = {
-    logger.info("Executing RML mapping ...")
-    val rmlConnector = new RMLMapperConnector();
-    rmlConnector.executeWithMain(mappingExecution);
-  }
-
-
-
-  def getMappingExecutionResultURL(mdSHA:String, datasetDistributionSHA:String) = {
-
-  }
-
-  def generateManifestFile(mappingExecutionResult:AnnotatedDistribution
-                           //, datasetDistribution: Distribution
-                           , unannotatedDistributions: List[UnannotatedDistribution]
-                           //, mappingDocument:MappingDocument
-                           , mdId: String
-                           , mdHash: String
-                           //, mdDownloadURL:String
-                           //, pMdHash:String
-                          ) = {
-    logger.info("Generating manifest file for Mapping Execution Result ...")
-    try {
-      val templateFiles = List(
-        "templates/metadata-namespaces-template.ttl"
-        , "templates/metadata-mappingexecutionresult-template.ttl"
-      );
-
-      //val datasetDistributionDownloadURL:String = "";
-
-      val downloadURL = if(mappingExecutionResult.dcatDownloadURL == null) { "" }
-      else { mappingExecutionResult.dcatDownloadURL }
-      logger.info(s"downloadURL = ${downloadURL}")
-
-      val mappingDocumentHash = if(mdHash == null) { "" } else { mdHash }
-      logger.info(s"mappingDocumentHash = ${mappingDocumentHash}")
-
-      //val datasetDistributionHash = unannotatedDataset.dcatDistributions.hashCode().toString
-      val datasetDistributionHash = MappingPediaUtility.calculateHash(unannotatedDistributions);
-      logger.info(s"datasetDistributionHash = ${datasetDistributionHash}")
-
-      val datasetId = mappingExecutionResult.dataset.dctIdentifier;
-
-      val mapValues:Map[String,String] = Map(
-        "$mappingExecutionResultID" -> mappingExecutionResult.dctIdentifier
-        , "$mappingExecutionResultTitle" -> mappingExecutionResult.dctTitle
-        , "$mappingExecutionResultDescription" -> mappingExecutionResult.dctDescription
-        , "$datasetID" -> datasetId
-        , "$mappingDocumentID" -> mdId
-        , "$downloadURL" -> downloadURL
-        , "$mappingDocumentHash" -> mappingDocumentHash
-        , "$datasetDistributionHash" -> datasetDistributionHash
-        , "$issued" -> mappingExecutionResult.dctIssued
-        , "$modified" -> mappingExecutionResult.dctModified
-
-      );
-
-      val manifestString = MappingPediaEngine.generateManifestString(
-        mapValues, templateFiles);
-      val filename = s"metadata-mappingexecutionresult-${
-        mappingExecutionResult.dctIdentifier}.ttl";
-      val manifestFile = MappingPediaEngine.generateManifestFile(
-        manifestString, filename, datasetId);
-      manifestFile;
-    } catch {
-      case e:Exception => {
-        e.printStackTrace()
-        val errorMessage = "Error occured when generating manifest file: " + e.getMessage
-        null;
-      }
-    }
-  }
-
-}
