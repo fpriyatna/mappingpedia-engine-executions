@@ -14,16 +14,11 @@ import es.upm.fi.dia.oeg.mappingpedia.utility._
 import es.upm.fi.dia.oeg.morph.base.engine.MorphBaseRunner
 import es.upm.fi.dia.oeg.morph.r2rml.rdb.engine.{MorphCSVProperties, MorphCSVRunnerFactory, MorphRDBProperties, MorphRDBRunnerFactory}
 import com.fasterxml.jackson.databind.ObjectMapper
-import org.apache.http.client.methods.CloseableHttpResponse
-import org.apache.http.impl.client.CloseableHttpClient
-import org.json.JSONObject
 import org.springframework.http.HttpStatus
 
-import scala.collection.mutable
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Failure, Success}
 
 class MappingExecutionController(
                                   val ckanClient:CKANUtility
@@ -229,15 +224,15 @@ class MappingExecutionController(
       logger.debug(s"cacheExecutionURL = ${cacheExecutionURL}");
 
       if(cacheExecutionURL == null || cacheExecutionURL.results.isEmpty || !useCache) {
-
-
         val mappedClasses:String = try {
           //this.mappingDocumentController.findMappedClassesByMappingDocumentId(md.dctIdentifier).results.mkString(",");
 
-          val mappingsServerUrl = MPCConstants.ENGINE_DATASETS_SERVER + "mapped_classes?mapping_document_id=" + mdId;
-          logger.info("mappingsServerUrl = " + mappingsServerUrl);
-          val jsonResponse = Unirest.get(mappingsServerUrl).asJson();
-          jsonResponse.getBody().getObject().getJSONArray("results").toList.toArray.toList.mkString(",")
+          val mappedClassesURL = MPCConstants.ENGINE_DATASETS_SERVER + "mapped_classes?mapping_document_id=" + mdId;
+          logger.info("mappedClassesURL = " + mappedClassesURL);
+          val response = Unirest.get(mappedClassesURL).asJson();
+          if(response.getStatus >= 200 && response.getStatus < 300) {
+            response.getBody().getObject().getJSONArray("results").toList.toArray.toList.mkString(",")
+          } else { null }
         } catch {
           case e:Exception => {
             e.printStackTrace()
@@ -338,8 +333,9 @@ class MappingExecutionController(
         //STORING MAPPING EXECUTION RESULT AS A RESOURCE ON CKAN
         val ckanAddResourceResponse = try {
           if(MappingPediaEngine.mappingpediaProperties.ckanEnable && pStoreToCKAN) {
-
-            val annotatedResourcesIds = ckanClient.getAnnotatedResourcesIds(dataset.ckanPackageId);
+            val annotatedResourcesIds = if(dataset.ckanPackageId != null) {
+              ckanClient.getAnnotatedResourcesIds(dataset.ckanPackageId);
+            } else { null }
             logger.info(s"annotatedResourcesIds = ${annotatedResourcesIds}");
 
             logger.info("STORING MAPPING EXECUTION RESULT ON CKAN ...")
@@ -451,7 +447,7 @@ class MappingExecutionController(
         //STORING MANIFEST FILE AS TRIPLES ON VIRTUOSO
         val addManifestVirtuosoResponse:String = try {
           if(MappingPediaEngine.mappingpediaProperties.virtuosoEnabled) {
-            MappingExecutionController.storeManifestOnVirtuoso(manifestFile);
+            this.storeManifestOnVirtuoso(manifestFile);
           } else {
             "Storing to Virtuoso is not enabled!";
           }
@@ -626,6 +622,17 @@ class MappingExecutionController(
     githubResponse
   }
 
+  def storeManifestOnVirtuoso(manifestFile:File) = {
+    if(manifestFile != null) {
+      logger.info("storing the manifest triples of a mapping execution result on virtuoso ...")
+      logger.debug("manifestFile = " + manifestFile);
+      this.virtuosoClient.storeFromFile(manifestFile)
+      logger.info("manifest triples stored on virtuoso.")
+      "OK";
+    } else {
+      "No manifest file specified/generated!";
+    }
+  }
 }
 
 object MappingExecutionController {
@@ -797,17 +804,7 @@ object MappingExecutionController {
     rmlConnector.executeWithMain(mappingExecution);
   }
 
-  def storeManifestOnVirtuoso(manifestFile:File) = {
-    if(manifestFile != null) {
-      logger.info("storing the manifest triples of a mapping execution result on virtuoso ...")
-      logger.debug("manifestFile = " + manifestFile);
-      MappingPediaEngine.virtuosoClient.storeFromFile(manifestFile)
-      logger.info("manifest triples stored on virtuoso.")
-      "OK";
-    } else {
-      "No manifest file specified/generated!";
-    }
-  }
+
 
   def getMappingExecutionResultURL(mdSHA:String, datasetDistributionSHA:String) = {
 
