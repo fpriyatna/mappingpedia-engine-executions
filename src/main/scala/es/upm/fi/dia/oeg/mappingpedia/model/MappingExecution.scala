@@ -1,21 +1,112 @@
 package es.upm.fi.dia.oeg.mappingpedia.model
 
 import java.util.UUID
+import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
-class MappingExecution(val mappingDocument:MappingDocument
-                       , val unannotatedDistributions: List[UnannotatedDistribution]
-                       , val jdbcConnection: JDBCConnection
-                       , val queryFileName:String
-                       , val pOutputFileName:String
-                       , val pOutputFileExtension:String
-                       , val pOutputMediaType: String
-                       , val pStoreToCKAN:Boolean
-                       , val pStoreToGithub:Boolean
-                       , val pStoreExecutionResultToVirtuoso:Boolean
-                       , val useCache:Boolean
-                       , val callbackURL:String
-                       , val updateResource:Boolean
+object MappingExecution {
+  def apply(
+             //mappingDocument:MappingDocument
+             unannotatedDistributions: java.util.List[UnannotatedDistribution]
+             , jdbcConnection: JDBCConnection
+             , queryFileName:String
+             , pOutputFileName:String
+             , pOutputFileExtension:String
+             , pOutputMediaType: String
+             , pStoreToCKAN:Boolean
+             , pStoreToGithub:Boolean
+             , pStoreExecutionResultToVirtuoso:Boolean
+             , useCache:Boolean
+             , callbackURL:String
+             , updateResource:Boolean
+             , mdId: String
+             , mdHash: String
+             , mdDownloadURL:String
+             , mdLanguage:String
+           ) {
+    new MappingExecution(
+      //mappingDocument
+      unannotatedDistributions.asScala.toList
+      , jdbcConnection
+      , queryFileName
+      , pOutputFileName
+      , pOutputFileExtension
+      , pOutputMediaType
+      , pStoreToCKAN
+      , pStoreToGithub
+      , pStoreExecutionResultToVirtuoso
+      , useCache
+      , callbackURL
+      , updateResource
+      , mdId: String
+      , mdHash: String
+      , mdDownloadURL:String
+      , mdLanguage:String
+    )
+  }
+}
+
+class MappingExecution(
+                        // val mappingDocument:MappingDocument
+                        val unannotatedDistributions: List[UnannotatedDistribution]
+                        , val jdbcConnection: JDBCConnection
+                        , val queryFileName:String
+                        , val pOutputFileName:String
+                        , val pOutputFileExtension:String
+                        , val pOutputMediaType: String
+                        , val pStoreToCKAN:Boolean
+                        , val pStoreToGithub:Boolean
+                        , val pStoreExecutionResultToVirtuoso:Boolean
+                        , val useCache:Boolean
+                        , val callbackURL:String
+                        , val updateResource:Boolean
+                        , val mdId: String
+                        , val mdHash: String
+                        , val mdDownloadURL:String
+                        , val mdLanguage:String
                       ) {
+
+  def this(
+            //mappingDocument:MappingDocument
+            unannotatedDistributions: java.util.List[UnannotatedDistribution]
+            , jdbcConnection: JDBCConnection
+            , queryFileName:String
+            , pOutputFileName:String
+            , pOutputFileExtension:String
+            , pOutputMediaType: String
+            , pStoreToCKAN:Boolean
+            , pStoreToGithub:Boolean
+            , pStoreExecutionResultToVirtuoso:Boolean
+            , useCache:Boolean
+            , callbackURL:String
+            , updateResource:Boolean
+            , mdId: String
+            , mdHash: String
+            , mdDownloadURL:String
+            , mdLanguage:String
+          ) {
+    this(
+      //mappingDocument
+      unannotatedDistributions.asScala.toList
+      , jdbcConnection
+      , queryFileName
+      , pOutputFileName
+      , pOutputFileExtension
+      , pOutputMediaType
+      , pStoreToCKAN
+      , pStoreToGithub
+      , pStoreExecutionResultToVirtuoso
+      , useCache
+      , callbackURL
+      , updateResource
+      , mdId: String
+      , mdHash: String
+      , mdDownloadURL:String
+      , mdLanguage:String
+    )
+  }
+
+
   /*
     def this(mappingDocument:MappingDocument
              , unannotatedDistributions: List[UnannotatedDistribution]

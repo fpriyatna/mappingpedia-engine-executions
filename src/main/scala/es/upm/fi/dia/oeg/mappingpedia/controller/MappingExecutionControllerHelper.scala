@@ -33,7 +33,8 @@ class MappingExecutionControllerHelper(
           logger.info(s"${this} isProcessing = ${isProcessing}")
           val mappingExecution = executionQueue.dequeue();
 
-          val f = mappingExecutionController.executeMappingWithFuture(mappingExecution);
+          val f = mappingExecutionController.executeMappingWithFuture(mappingExecution
+          );
           val mapper = new ObjectMapper();
           val callbackURL = mappingExecution.callbackURL
           val executeMappingResult = if(callbackURL == null) {
