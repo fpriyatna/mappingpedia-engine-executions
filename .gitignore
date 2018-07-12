@@ -4,3 +4,10 @@
 *.iml
 .idea
 target
+.classpath
+.cache-tests
+.project
+.cache-main
+.settings/
+executions/
+upload-dir/
