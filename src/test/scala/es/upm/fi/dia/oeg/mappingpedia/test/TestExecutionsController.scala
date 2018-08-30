@@ -13,8 +13,9 @@ def main(args:Array[String]) = {
   }
 
   def testExecuteMapping(executionsController:MappingExecutionController) {
-    val organizationId = "test-mobileage-upm3";
-    val ckanPackageId = "80171420-9042-4414-b844-9c5a651373b5";
+    val organizationId = "test-mobileage-upm4";
+    val ckanPackageId = "f7d8c68d-5a39-4015-b48b-c126d9dc49cb";
+		val datasetId = "4f9085c2-8f87-4a05-a375-4e3fc1bd0b0a"
     val distributionDownloadUrl = List("https://raw.githubusercontent.com/oeg-upm/mappingpedia-engine/master/examples/edificio-historico.csv");
     val mdDownloadUrl = "https://raw.githubusercontent.com/oeg-upm/mappingpedia-engine/master/examples/edificio-historico.r2rml.ttl";
     

@@ -736,6 +736,26 @@ class MappingExecutionController(
           }
         }
 
+        //STORING EXECUTION RESULT FILE AS TRIPLES ON VIRTUOSO
+        val addExecutionResultVirtuosoResponse:String = try {
+          if(this.properties.virtuosoEnabled) {
+            this.storeExecutionResultOnVirtuoso(localOutputFile);
+          } else {
+            "Storing to Virtuoso is not enabled!";
+          }
+        } catch {
+          case e: Exception => {
+            errorOccured = true;
+            e.printStackTrace()
+            val errorMessage = "error storing execution result triples on Virtuoso: " + e.getMessage
+            val executionResultInString = scala.io.Source.fromFile(manifestFile).getLines.reduceLeft(_+_)
+            logger.error(errorMessage);
+            logger.error(s"executionResultInString = $executionResultInString");
+            collectiveErrorMessage = errorMessage :: collectiveErrorMessage
+            e.getMessage
+          }
+        }
+
 
         val (responseStatus, responseStatusText) = if(errorOccured) {
           (HttpURLConnection.HTTP_INTERNAL_ERROR, "Internal Error: " + collectiveErrorMessage.mkString("[", ",", "]"))
@@ -903,6 +923,18 @@ class MappingExecutionController(
       "OK";
     } else {
       "No manifest file specified/generated!";
+    }
+  }
+
+  def storeExecutionResultOnVirtuoso(executionResultFile:File) = {
+    if(executionResultFile != null) {
+      logger.info("storing the execution result triples on virtuoso ...")
+      logger.debug("executionResultFile = " + executionResultFile);
+      this.virtuosoClient.storeFromFile(executionResultFile)
+      logger.info("execution result triples stored on virtuoso.")
+      "OK";
+    } else {
+      "No execution result file specified/generated!";
     }
   }
 }
