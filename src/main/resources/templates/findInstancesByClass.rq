@@ -1,0 +1,14 @@
+#findMappingExecutionResultByHash.rq
+
+prefix mpv: <http://mappingpedia.linkeddata.es/vocabulary#>
+prefix dcat: <http://www.w3.org/ns/dcat#>
+prefix mpimd: <http://mappingpedia.linkeddata.es/instance/mappingdocument/>
+prefix dcterms: <http://purl.org/dc/elements/1.1/>
+prefix schema: <http://schema.org/>
+
+SELECT DISTINCT *
+WHERE {
+    ?s a ?className .
+    OPTIONAL { ?s schema:name ?title . }
+    FILTER regex(str(?className), "$className", "i")
+}

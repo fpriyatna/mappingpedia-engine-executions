@@ -787,6 +787,51 @@ class MappingExecutionController(
 
   }
 
+
+  def findInstancesByClass(className:String) = {
+    logger.info("findInstancesByClass")
+    val queryTemplateFile = "templates/findInstancesByClass.rq";
+
+    val mapValues: Map[String, String] = Map(
+      "$graphURL" -> this.properties.getProperty(MappingPediaConstant.GRAPH_NAME)
+      , "$className" -> className
+    );
+
+    val queryString: String = MpcUtility.generateStringFromTemplateFile(mapValues, queryTemplateFile)
+    logger.info(s"queryString = ${queryString}")
+    this.findByQueryString(queryString);
+  }
+
+  def findByQueryString(queryString:String) = {
+    logger.debug(s"queryString = $queryString");
+
+    val qexec = this.virtuosoClient.createQueryExecution(queryString);
+
+    var results: List[Instance] = List.empty;
+    try {
+      val rs = qexec.execSelect
+      //logger.info("Obtaining result from executing query=\n" + queryString)
+      while (rs.hasNext) {
+        val qs = rs.nextSolution
+        val instanceId = qs.get("s").toString;
+        val instanceType = qs.get("className").toString;
+        val instanceTitle = MappingPediaUtility.getStringOrElse(qs, "title", null)
+        val instance = new Instance(instanceId, instanceType, instanceTitle);
+        results = instance :: results;
+      }
+    }
+    catch {
+      case e:Exception => {
+        e.printStackTrace()
+        logger.error(s"Error execution query: ${e.getMessage}")
+      }
+    }
+    finally qexec.close
+
+    val listResult = new ListResult[Instance](results.length, results);
+    listResult
+  }
+
   def getInstances(aClass:String, maxMappingDocuments:Integer, useCache:Boolean
                    , updateResource:Boolean) = {
     logger.info(s"useCache = ${useCache}");
