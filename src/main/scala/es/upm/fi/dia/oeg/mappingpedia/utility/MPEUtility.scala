@@ -24,7 +24,7 @@ import scala.io.Source
 /**
   * Created by freddy on 10/08/2017.
   */
-object MappingPediaUtility {
+object MPEUtility {
   val logger: Logger = LoggerFactory.getLogger(this.getClass);
 
 
@@ -229,7 +229,7 @@ object MappingPediaUtility {
     // Get the name of uploaded files.
     val fileName = fileRef.getOriginalFilename();
 
-    val file = MappingPediaUtility.materializeFileInputStream(fis, uuid, fileName);
+    val file = MPEUtility.materializeFileInputStream(fis, uuid, fileName);
     file;
   }
 
@@ -282,15 +282,23 @@ object MappingPediaUtility {
   }
 
   def calculateHash(distributions:List[Distribution]) : String = {
-  val datasetHashValue = distributions.foldLeft(0)((acc, distribution) => {
-      val distributionHashValue = MappingPediaUtility.calculateHash(
-        distribution.dcatDownloadURL, distribution.encoding);
-      logger.info(s"distributionHashValue = ${distributionHashValue}")
-      acc + distributionHashValue.toInt
-    })
+    try {
+      val datasetHashValue = distributions.foldLeft(0)((acc, distribution) => {
+        val distributionHashValue = MPEUtility.calculateHash(
+          distribution.dcatDownloadURL, distribution.encoding);
+        logger.info(s"distributionHashValue = ${distributionHashValue}")
+        acc + distributionHashValue.toInt
+      })
 
-    logger.debug(s"datasetHashValue = ${datasetHashValue}")
-    datasetHashValue.toString
+      logger.debug(s"datasetHashValue = ${datasetHashValue}")
+      datasetHashValue.toString
+    } catch {
+      case e:Exception => {
+        logger.error("Error calculating distributions hashcode: " + e.getMessage)
+        e.printStackTrace()
+        null
+      }
+    }
   }
 
 
@@ -299,7 +307,7 @@ object MappingPediaUtility {
   }
 
   def calculateHash(downloadURL:String, pEncoding:String) : String = {
-    logger.debug(s"calculating hash value of ${downloadURL}");
+    logger.info(s"calculating hash value of ${downloadURL}");
     val encoding = if(pEncoding == null) { "UTF-8" } else { pEncoding }
 
     val hashValue = try {

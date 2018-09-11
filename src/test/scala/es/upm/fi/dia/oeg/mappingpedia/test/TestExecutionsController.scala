@@ -9,14 +9,16 @@ object TestExecutionsController {
 	val executionsController = MappingExecutionController.apply();
 
 def main(args:Array[String]) = {
-		//this.testExecuteMapping();
-	this.testFindInstancesByClassName("Building");
+		//this.testExecuteMapping1();
+  //this.testExecuteMapping2();
+	this.testQueryMapping();
+	  //this.testFindInstancesByClassName("Building");
   }
 
-  def testExecuteMapping() {
+  def testExecuteMapping1() {
     val organizationId = "test-mobileage-upm4";
-    val ckanPackageId = "203edd3a-bf01-45e3-aba9-efa9bf61d1e0";
-		val datasetId = "99a532f3-ee00-4aee-a814-5e28098bad03"
+    val ckanPackageId = "039de928-b279-4182-be18-483f2e5dc031";
+		val datasetId = "cde5a55d-302b-4eff-bb15-acd030605e27"
     val distributionDownloadUrl = List("https://raw.githubusercontent.com/oeg-upm/mappingpedia-engine/master/examples/edificio-historico.csv");
     val mdDownloadUrl = "https://raw.githubusercontent.com/oeg-upm/mappingpedia-engine/master/examples/edificio-historico.r2rml.ttl";
     
@@ -27,12 +29,36 @@ def main(args:Array[String]) = {
 		    , mdDownloadUrl
 				);
 		
-		//IN THIS PARTICULAR CASE WE HAVE TO STORE THE EXECUTION RESULT ON CKAN
-		executionsController.executeMapping(mappingExecution);   
+		val result = executionsController.executeMapping(mappingExecution);
+    val resultDownloadUrl = result.getMapping_execution_result_download_url;
+    logger.info(s"resultDownloadUrl = ${resultDownloadUrl}")
+  }
+
+  def testExecuteMapping2() {
+    val datasetId = "5f0ac042-a289-4a5a-a1ad-a0a760cfbcf9"
+    val mdId = "0cc9daaa-b425-40e9-a74c-e5ea88a17cc1"
+
+    val mappingExecution = MappingExecution(datasetId, mdId, null);
+
+    val result = executionsController.executeMapping(mappingExecution);
+    val resultDownloadUrl = result.getMapping_execution_result_download_url;
+    logger.info(s"resultDownloadUrl = ${resultDownloadUrl}")
   }
 
 	def testFindInstancesByClassName(className:String) = {
 		val instances = executionsController.findInstancesByClass(className)
 		logger.info(s"instances = ${instances}")
 	}
+
+  def testQueryMapping() {
+		val datasetId = "5f0ac042-a289-4a5a-a1ad-a0a760cfbcf9"
+    val mdId= "0cc9daaa-b425-40e9-a74c-e5ea88a17cc1";
+    val queryUrl = "https://raw.githubusercontent.com/oeg-upm/morph-rdb/master/morph-examples/examples-csv/edificio-historico-q1.rq";
+    
+		val mappingExecution = MappingExecution(datasetId, mdId, queryUrl);
+		
+		val result = executionsController.executeMapping(mappingExecution);
+    val resultDownloadUrl = result.getMapping_execution_result_download_url;
+    logger.info(s"resultDownloadUrl = ${resultDownloadUrl}")
+  }
 }

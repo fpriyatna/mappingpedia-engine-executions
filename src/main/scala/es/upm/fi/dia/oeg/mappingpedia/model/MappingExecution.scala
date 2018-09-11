@@ -1,16 +1,126 @@
 package es.upm.fi.dia.oeg.mappingpedia.model
 
+import java.net.HttpURLConnection
 import java.util.UUID
+
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
-import es.upm.fi.dia.oeg.mappingpedia.MPCConstants;
+import es.upm.fi.dia.oeg.mappingpedia.MPCConstants
 import org.slf4j.{Logger, LoggerFactory}
-import com.mashape.unirest.http.Unirest;
+import com.mashape.unirest.http.Unirest
+import es.upm.fi.dia.oeg.mappingpedia.model.result.ExecuteMappingResult
 import es.upm.fi.dia.oeg.mappingpedia.utility.MpcUtility
 
 object MappingExecution {
   val logger: Logger = LoggerFactory.getLogger(this.getClass);
-  
+
+  def getOrganizationId(datasetId:String) : String = {
+    val getDatasetUri = MPCConstants.ENGINE_DATASETS_SERVER + "dataset?dataset_id=" + datasetId;
+    logger.info("Hitting getDatasetUri:" + getDatasetUri);
+    val getDatasetUriJson = Unirest.get(getDatasetUri).asJson();
+    val getDatasetUriResponseStatus = getDatasetUriJson.getStatus();
+    logger.info("responseStatus = " + getDatasetUriResponseStatus);
+    val organizationId = if(getDatasetUriResponseStatus >= 200 && getDatasetUriResponseStatus < 300) {
+      val responseResultObject = getDatasetUriJson.getBody().getObject();
+      //logger.info("responseResultObject = " + responseResultObject);
+      responseResultObject.getJSONArray("results").getJSONObject(0).getString("ckan_organization_name");
+    } else {
+      val errorMessage = s"Unable to obtain organization id from the dataset id: ${datasetId}"
+      val internalError = new ExecuteMappingResult(
+        HttpURLConnection.HTTP_INTERNAL_ERROR, "Unable to obtain organization id"
+      );
+      throw new Exception(errorMessage);
+    }
+    organizationId
+  }
+
+  def getDistributionDownloadUrl(datasetId:String) = {
+    val getDistributionsUri = MPCConstants.ENGINE_DATASETS_SERVER + "distributions?dataset_id=" + datasetId;
+    logger.info("Hitting getDistributionsUri:" + getDistributionsUri);
+    val jsonResponse = Unirest.get(getDistributionsUri).asJson();
+    val responseStatus = jsonResponse.getStatus();
+    logger.info("responseStatus = " + responseStatus);
+    val distributionDownloadUrl = if(responseStatus >= 200 && responseStatus < 300) {
+      val responseResultObject = jsonResponse.getBody().getObject();
+      responseResultObject.getJSONArray("results").getJSONObject(0).getString("download_url");
+    } else {
+      val errorMessage = "Unable to obtain mapping document download URL";
+      throw new Exception(errorMessage);
+    }
+    logger.info("distributionDownloadUrl = " + distributionDownloadUrl);
+    distributionDownloadUrl
+  }
+
+  def getMappingDetails(mdId:String) : MappingDocument = {
+    val url = MPCConstants.ENGINE_MAPPINGS_SERVER + "mappings?id=" + mdId;
+    logger.info("Hitting url:" + url);
+    val jsonResponse = Unirest.get(url).asJson();
+    val responseStatus = jsonResponse.getStatus();
+    logger.info("responseStatus = " + responseStatus);
+    val result = if(responseStatus >= 200 && responseStatus < 300) {
+      val firstObject = jsonResponse.getBody().getObject().getJSONArray("results").getJSONObject(0);
+      val md = new MappingDocument(mdId);
+      md.setDownloadURL(firstObject.getString("downloadURL"))
+      md.hash = firstObject.getString("hash")
+      md.mappingLanguage = firstObject.getString("mapping_language")
+      md;
+    } else {
+      val errorMessage = s"Unable to obtain mapping document details: ${mdId}";
+      throw new Exception(errorMessage);
+    }
+    logger.info("result = " + result);
+    result
+  }
+
+  def apply(datasetId:String, mdId:String, queryFileUrl:String) : MappingExecution = {
+    val pOutputFileExtension = if(queryFileUrl == null) { ".nt" } else { ".xml"}
+    val pOutputFileName = null;
+    val pOutputMediaType = null;
+    val storeToCKAN = if(queryFileUrl == null) { true} else { false }
+    val pStoreToGithub = true;
+    val pStoreExecutionResultToVirtuoso = if(queryFileUrl == null) { true } else { false }
+    val useCache:Boolean = true;
+    val callbackURL = null;
+    val updateResource:Boolean = false;
+
+    //GET ORGANIZATION ID BASED ON DATASET ID
+    val organizationId = this.getOrganizationId(datasetId)
+    logger.info("organizationId = " + organizationId);
+
+    //GET DISTRIBUTION DOWNLOAD URL
+    val distributionDownloadUrl = this.getDistributionDownloadUrl(datasetId);
+    logger.info("distributionDownloadUrl = " + distributionDownloadUrl);
+
+    //CREATE UNANNOTATION DISTRIBUTION INSTANCE
+    val unannotatedDistribution = new UnannotatedDistribution(organizationId, datasetId);
+    unannotatedDistribution.dcatDownloadURL = distributionDownloadUrl;
+
+
+    val md = this.getMappingDetails(mdId);
+
+    val mappingExecution = new MappingExecution(
+      List(unannotatedDistribution)
+    , null: JDBCConnection
+    , queryFileUrl:String
+    , pOutputFileName:String
+    , pOutputFileExtension:String
+    , pOutputMediaType: String
+    //, pStoreToCKAN:Boolean
+    , pStoreToGithub:Boolean
+    , pStoreExecutionResultToVirtuoso:Boolean
+    , useCache:Boolean
+    , callbackURL:String
+    , updateResource:Boolean
+    , mdId: String
+    , md.hash: String
+    , md.getDownloadURL():String
+    , md.mappingLanguage:String
+    )
+
+    mappingExecution.storeToCKAN = storeToCKAN;
+    mappingExecution;
+  }
+
   def apply(
       organizationId:String
       , ckanPackageId:String
@@ -99,7 +209,7 @@ object MappingExecution {
     logger.info("postMappingsResponse = " + postMappingsResponse);
                 
     
-    new MappingExecution(
+    val mappingExecution = new MappingExecution(
       //mappingDocument
       unannotatedDistributions
       , jdbcConnection
@@ -107,7 +217,7 @@ object MappingExecution {
       , outputFileName
       , outputFileExtension
       , outputMediaType
-      , storeToCKAN
+      //, storeToCKAN
       , storeToGithub
       , storeExecutionResultToVirtuoso
       , useCache
@@ -117,7 +227,10 @@ object MappingExecution {
       , mdHash: String
       , mdDownloadUrl
       , mdLanguage:String
-    )    
+    );
+    mappingExecution.storeToCKAN = storeToCKAN;
+    mappingExecution
+
   }
   
   def apply(
@@ -139,7 +252,7 @@ object MappingExecution {
              , mdDownloadURL:String
              , mdLanguage:String
            ) {
-    new MappingExecution(
+    val mappingExecution = new MappingExecution(
       //mappingDocument
       unannotatedDistributions.asScala.toList
       , jdbcConnection
@@ -147,7 +260,7 @@ object MappingExecution {
       , pOutputFileName
       , pOutputFileExtension
       , pOutputMediaType
-      , pStoreToCKAN
+      //, pStoreToCKAN
       , pStoreToGithub
       , pStoreExecutionResultToVirtuoso
       , useCache
@@ -157,7 +270,9 @@ object MappingExecution {
       , mdHash: String
       , mdDownloadURL:String
       , mdLanguage:String
-    )
+    );
+    mappingExecution.storeToCKAN = pStoreToCKAN;
+
   }
 }
 
@@ -169,7 +284,7 @@ class MappingExecution(
                         , val pOutputFileName:String
                         , val pOutputFileExtension:String
                         , val pOutputMediaType: String
-                        , val pStoreToCKAN:Boolean
+                        //, val pStoreToCKAN:Boolean
                         , val pStoreToGithub:Boolean
                         , val pStoreExecutionResultToVirtuoso:Boolean
                         , val useCache:Boolean
@@ -180,7 +295,6 @@ class MappingExecution(
                         , val mdDownloadURL:String
                         , val mdLanguage:String
                       ) {
-
   def this(
             //mappingDocument:MappingDocument
             unannotatedDistributions: java.util.List[UnannotatedDistribution]
@@ -189,7 +303,7 @@ class MappingExecution(
             , pOutputFileName:String
             , pOutputFileExtension:String
             , pOutputMediaType: String
-            , pStoreToCKAN:Boolean
+            //, pStoreToCKAN:Boolean
             , pStoreToGithub:Boolean
             , pStoreExecutionResultToVirtuoso:Boolean
             , useCache:Boolean
@@ -208,7 +322,7 @@ class MappingExecution(
       , pOutputFileName
       , pOutputFileExtension
       , pOutputMediaType
-      , pStoreToCKAN
+      //, pStoreToCKAN
       , pStoreToGithub
       , pStoreExecutionResultToVirtuoso
       , useCache

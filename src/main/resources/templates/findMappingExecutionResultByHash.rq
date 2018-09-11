@@ -11,6 +11,7 @@ WHERE {
     ?s dcterms:issued ?dateIssued .
     ?s mpv:hasMappingDocumentHash "$mdHash"^^<http://www.w3.org/2001/XMLSchema#string> .
     ?s mpv:hasDatasetDistributionHash "$datasetDistributionHash"^^<http://www.w3.org/2001/XMLSchema#string> .
+    ?s mpv:hasQueryHash "$queryHash"^^<http://www.w3.org/2001/XMLSchema#string> .
     ?s dcat:downloadURL ?downloadURL .
 }
 ORDER BY DESC(?dateIssued)
