@@ -73,7 +73,7 @@ object MappingExecution {
   }
 
   def apply(datasetId:String, mdId:String, queryFileUrl:String) : MappingExecution = {
-    val pOutputFileExtension = if(queryFileUrl == null) { ".nt" } else { ".xml"}
+    val pOutputFileExtension = if(queryFileUrl == null) { "txt" } else { "txt"}
     val pOutputFileName = null;
     val pOutputMediaType = null;
     val storeToCKAN = if(queryFileUrl == null) { true} else { false }
