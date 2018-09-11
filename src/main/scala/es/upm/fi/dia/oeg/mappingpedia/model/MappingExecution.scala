@@ -61,7 +61,11 @@ object MappingExecution {
       val firstObject = jsonResponse.getBody().getObject().getJSONArray("results").getJSONObject(0);
       val md = new MappingDocument(mdId);
       md.setDownloadURL(firstObject.getString("downloadURL"))
-      md.hash = firstObject.getString("hash")
+      md.hash = try {
+        firstObject.getString("hash")
+      } catch {
+        case e:Exception => { null }
+      }
       md.mappingLanguage = firstObject.getString("mapping_language")
       md;
     } else {
@@ -95,7 +99,7 @@ object MappingExecution {
     val unannotatedDistribution = new UnannotatedDistribution(organizationId, datasetId);
     unannotatedDistribution.dcatDownloadURL = distributionDownloadUrl;
 
-
+    //CREATE MAPPINGS DETAILS FROM ID
     val md = this.getMappingDetails(mdId);
 
     val mappingExecution = new MappingExecution(
