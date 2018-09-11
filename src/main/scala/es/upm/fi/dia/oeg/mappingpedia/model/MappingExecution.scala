@@ -61,12 +61,8 @@ object MappingExecution {
       val firstObject = jsonResponse.getBody().getObject().getJSONArray("results").getJSONObject(0);
       val md = new MappingDocument(mdId);
       md.setDownloadURL(firstObject.getString("downloadURL"))
-      md.hash = try {
-        firstObject.getString("hash")
-      } catch {
-        case e:Exception => { null }
-      }
-      md.mappingLanguage = firstObject.getString("mapping_language")
+      md.hash = try { firstObject.getString("hash") } catch { case e:Exception => { null } }
+      md.mappingLanguage = try { firstObject.getString("mapping_language") } catch { case e:Exception => { null } }
       md;
     } else {
       val errorMessage = s"Unable to obtain mapping document details: ${mdId}";
