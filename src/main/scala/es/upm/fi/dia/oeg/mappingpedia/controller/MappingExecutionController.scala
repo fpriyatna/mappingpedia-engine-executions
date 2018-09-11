@@ -19,6 +19,8 @@ import org.springframework.http.HttpStatus
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 
 object MappingExecutionController {
   val logger: Logger = LoggerFactory.getLogger(this.getClass);
@@ -511,7 +513,19 @@ class MappingExecutionController(
           logger.info("mappedClassesURL = " + mappedClassesURL);
           val response = Unirest.get(mappedClassesURL).asJson();
           if(response.getStatus >= 200 && response.getStatus < 300) {
-            response.getBody().getObject().getJSONArray("results").toList.toArray.toList.mkString(",")
+            val responseResultArray = response.getBody().getObject().getJSONArray("results");
+            logger.info(s"responseResultArray = ${responseResultArray}")
+            logger.info(s"responseResultArray.length() = ${responseResultArray.length()}")
+
+
+            //responseResultArray.toList.toArray.toList.mkString(",")
+            var mappedClassList:List[String] = List();
+            for(i <- 0 to responseResultArray.length() -1) {
+              val mappedClass = responseResultArray.getString(i);
+              logger.info(s"mappedClass = $mappedClass")
+              mappedClassList = mappedClass :: mappedClassList;
+            }
+            mappedClassList.mkString(",");
           } else { null }
         } catch {
           case e:Exception => {
