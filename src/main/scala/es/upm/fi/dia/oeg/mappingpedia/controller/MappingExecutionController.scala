@@ -222,7 +222,7 @@ object MappingExecutionController {
       logger.info(s"mappingDocumentHash = ${mappingDocumentHash}")
 
       //val datasetDistributionHash = unannotatedDataset.dcatDistributions.hashCode().toString
-      val datasetDistributionHash = MappingPediaUtility.calculateHash(unannotatedDistributions);
+      val datasetDistributionHash = MPEUtility.calculateHash(unannotatedDistributions);
       logger.info(s"datasetDistributionHash = ${datasetDistributionHash}")
 
       val datasetId = mappingExecutionResult.dataset.dctIdentifier;
@@ -310,11 +310,16 @@ class MappingExecutionController(
   }
 
 
-  def findByHash(mdHash:String, datasetDistributionHash:String) = {
+  def findByHash(mdHash:String, datasetDistributionHash:String):ListResult[String] = {
+    this.findByHash(mdHash, datasetDistributionHash, "");
+  }
+
+  def findByHash(mdHash:String, datasetDistributionHash:String, queryHash:String) :ListResult[String] = {
     val mapValues: Map[String, String] = Map(
       "$graphURL" -> this.properties.graphName
       , "$mdHash" -> mdHash
       , "$datasetDistributionHash" -> datasetDistributionHash
+      , "$queryHash" -> queryHash
     );
 
     val queryString: String = MpcUtility.generateStringFromTemplateFile(
@@ -466,9 +471,11 @@ class MappingExecutionController(
     val pStoreToGithub = mappingExecution.pStoreToGithub
     val useCache = mappingExecution.useCache
     val pStoreToCKAN = mappingExecution.storeToCKAN;
+    val pStoreToVirtuoso = mappingExecution.pStoreExecutionResultToVirtuoso;
     val mdId = mappingExecution.mdId;
     val pMdHash = mappingExecution.mdHash
     val mdDownloadURL = mappingExecution.mdDownloadURL
+    val queryUrl = mappingExecution.queryFileName;
 
     val f = Future {
       var errorOccured = false;
@@ -480,17 +487,18 @@ class MappingExecutionController(
 
       val organization = dataset.dctPublisher
       //val unannotatedDistributions = dataset.getUnannotatedDistributions
-      val unannotatedDatasetHash = MappingPediaUtility.calculateHash(
+      val unannotatedDatasetHash = MPEUtility.calculateHash(
         unannotatedDistributions);
 
       //val mdDownloadURL = md.getDownloadURL();
       logger.info(s"pMdHash = ${pMdHash}");
       logger.info(s"mdDownloadURL = ${mdDownloadURL}");
       val mdHash = if (pMdHash == null && mdDownloadURL != null ) {
-        MappingPediaUtility.calculateHash(mdDownloadURL, "UTF-8");
+        MPEUtility.calculateHash(mdDownloadURL, "UTF-8");
       } else {
         pMdHash
       }
+
 
       val cacheExecutionURL = this.findByHash(mdHash, unannotatedDatasetHash);
       logger.debug(s"cacheExecutionURL = ${cacheExecutionURL}");
@@ -499,7 +507,7 @@ class MappingExecutionController(
         val mappedClasses:String = try {
           //this.mappingDocumentController.findMappedClassesByMappingDocumentId(md.dctIdentifier).results.mkString(",");
 
-          val mappedClassesURL = MPCConstants.ENGINE_DATASETS_SERVER + "mapped_classes?mapping_document_id=" + mdId;
+          val mappedClassesURL = MPCConstants.ENGINE_MAPPINGS_SERVER + "mapped_classes?mapping_document_id=" + mdId;
           logger.info("mappedClassesURL = " + mappedClassesURL);
           val response = Unirest.get(mappedClassesURL).asJson();
           if(response.getStatus >= 200 && response.getStatus < 300) {
@@ -739,7 +747,11 @@ class MappingExecutionController(
         //STORING EXECUTION RESULT FILE AS TRIPLES ON VIRTUOSO
         val addExecutionResultVirtuosoResponse:String = try {
           if(this.properties.virtuosoEnabled) {
-            this.storeExecutionResultOnVirtuoso(localOutputFile);
+            if(mappingExecution.pStoreExecutionResultToVirtuoso) {
+              this.storeExecutionResultOnVirtuoso(localOutputFile);
+            } else {
+              "Not storing result to Virtuoso.";
+            }
           } else {
             "Storing to Virtuoso is not enabled!";
           }
@@ -815,7 +827,7 @@ class MappingExecutionController(
         val qs = rs.nextSolution
         val instanceId = qs.get("s").toString;
         val instanceType = qs.get("className").toString;
-        val instanceTitle = MappingPediaUtility.getStringOrElse(qs, "title", null)
+        val instanceTitle = MPEUtility.getStringOrElse(qs, "title", null)
         val instance = new Instance(instanceId, instanceType, instanceTitle);
         results = instance :: results;
       }
@@ -866,7 +878,7 @@ class MappingExecutionController(
         unannotatedDistribution.dcatDownloadURL = md.dataset.getDistribution().dcatDownloadURL;
         unannotatedDistribution.hash = md.dataset.getDistribution().hash
         if (unannotatedDistribution.hash == null && unannotatedDistribution.dcatDownloadURL != null ) {
-          val hashValue = MappingPediaUtility.calculateHash(unannotatedDistribution.dcatDownloadURL, unannotatedDistribution.encoding);
+          val hashValue = MPEUtility.calculateHash(unannotatedDistribution.dcatDownloadURL, unannotatedDistribution.encoding);
           unannotatedDistribution.hash = hashValue
         }
 
@@ -887,7 +899,7 @@ class MappingExecutionController(
               unannotatedDistributions
               , jDBCConnection, queryFileName
               , outputFileName, outputFileExtension, outputMediaType
-              , false
+              //, false
               , true
               , false
               , useCache
@@ -915,7 +927,7 @@ class MappingExecutionController(
                 , mappingExecution, mappingExecutionResult))
             } else {
               val unannotatedDistributions = dataset.getUnannotatedDistributions;
-              val storeToCKAN = MappingPediaUtility.stringToBoolean("false");
+              val storeToCKAN = MPEUtility.stringToBoolean("false");
               mappingExecution.storeToCKAN = storeToCKAN
 
               //THERE IS NO NEED TO STORE THE EXECUTION RESULT IN THIS PARTICULAR CASE
