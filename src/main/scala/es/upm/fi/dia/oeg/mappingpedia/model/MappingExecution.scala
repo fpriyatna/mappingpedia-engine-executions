@@ -73,12 +73,14 @@ object MappingExecution {
   }
 
   def apply(datasetId:String, mdId:String, queryFileUrl:String) : MappingExecution = {
+    logger.info(s"queryFileUrl = ${queryFileUrl}")
     val pOutputFileExtension = if(queryFileUrl == null) { "txt" } else { "txt"}
     val pOutputFileName = null;
     val pOutputMediaType = null;
     val storeToCKAN = if(queryFileUrl == null) { true} else { false }
     val pStoreToGithub = true;
     val pStoreExecutionResultToVirtuoso = if(queryFileUrl == null) { true } else { false }
+    logger.info(s"pStoreExecutionResultToVirtuoso = ${pStoreExecutionResultToVirtuoso}")
     val useCache:Boolean = true;
     val callbackURL = null;
     val updateResource:Boolean = false;
@@ -116,6 +118,7 @@ object MappingExecution {
     , md.getDownloadURL():String
     , md.mappingLanguage:String
     )
+    logger.info(s"mappingExecution.pStoreExecutionResultToVirtuoso = ${mappingExecution.pStoreExecutionResultToVirtuoso}")
 
     mappingExecution.storeToCKAN = storeToCKAN;
     mappingExecution;
