@@ -759,6 +759,8 @@ class MappingExecutionController(
         }
 
         //STORING EXECUTION RESULT FILE AS TRIPLES ON VIRTUOSO
+        logger.info(s"this.properties.virtuosoEnabled = ${this.properties.virtuosoEnabled}")
+        logger.info(s"mappingExecution.pStoreExecutionResultToVirtuoso = ${mappingExecution.pStoreExecutionResultToVirtuoso}")
         val addExecutionResultVirtuosoResponse:String = try {
           if(this.properties.virtuosoEnabled) {
             if(mappingExecution.pStoreExecutionResultToVirtuoso) {

@@ -73,12 +73,16 @@ object MappingExecution {
   }
 
   def apply(datasetId:String, mdId:String, queryFileUrl:String) : MappingExecution = {
-    val pOutputFileExtension = if(queryFileUrl == null) { "txt" } else { "txt"}
+    logger.info(s"queryFileUrl = ${queryFileUrl}")
+    val pOutputFileExtension = if(queryFileUrl == null || queryFileUrl.equals("")) { "txt" } else { "xml"}
+    logger.info(s"pOutputFileExtension= ${pOutputFileExtension}")
     val pOutputFileName = null;
     val pOutputMediaType = null;
-    val storeToCKAN = if(queryFileUrl == null) { true} else { false }
+    val storeToCKAN = if(queryFileUrl == null || queryFileUrl.equals("")) { true} else { false }
+    logger.info(s"storeToCKAN = ${storeToCKAN}")
     val pStoreToGithub = true;
-    val pStoreExecutionResultToVirtuoso = if(queryFileUrl == null) { true } else { false }
+    val pStoreExecutionResultToVirtuoso = if(queryFileUrl == null || queryFileUrl.equals("")) { true } else { false }
+    logger.info(s"pStoreExecutionResultToVirtuoso = ${pStoreExecutionResultToVirtuoso}")
     val useCache:Boolean = true;
     val callbackURL = null;
     val updateResource:Boolean = false;
@@ -116,6 +120,9 @@ object MappingExecution {
     , md.getDownloadURL():String
     , md.mappingLanguage:String
     )
+    logger.info(s"mappingExecution.pStoreExecutionResultToVirtuoso = ${mappingExecution.pStoreExecutionResultToVirtuoso}")
+    logger.info(s"mappingExecution.storeToCKAN = ${mappingExecution.storeToCKAN}")
+    logger.info(s"mappingExecution.outputFileExtension = ${mappingExecution.outputFileExtension}")
 
     mappingExecution.storeToCKAN = storeToCKAN;
     mappingExecution;
